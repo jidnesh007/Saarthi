@@ -1,306 +1,441 @@
-import { useState, useEffect } from 'react'
-import { useAuth } from '../context/AuthContext'
-import { useNavigate } from 'react-router-dom'
-import api from '../services/Api'
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
-function JourneyDashboard() {
-  const { user, logout, isProfileComplete } = useAuth()
-  const navigate = useNavigate()
-  const [profile, setProfile] = useState(null)
-  const [journeyInput, setJourneyInput] = useState({ source: '', destination: '' })
-  const [journeyResult, setJourneyResult] = useState(null)
-  const [loading, setLoading] = useState(false)
+const Journey = () => {
+  const [stations, setStations] = useState([]);
+  const [source, setSource] = useState("");
+  const [destination, setDestination] = useState("");
+  const [sourceDropdown, setSourceDropdown] = useState(false);
+  const [destDropdown, setDestDropdown] = useState(false);
+  const [filteredSourceStations, setFilteredSourceStations] = useState([]);
+  const [filteredDestStations, setFilteredDestStations] = useState([]);
+  const [routes, setRoutes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [searchMessage, setSearchMessage] = useState("");
 
-  // Redirect to setup if profile is not complete
+  // Fetch all unique stations on component mount
   useEffect(() => {
-    if (!isProfileComplete) {
-      navigate('/setup', { replace: true })
-    }
-  }, [isProfileComplete, navigate])
+    fetchStations();
+  }, []);
 
+  const fetchStations = async () => {
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/journey/stations",
+      );
+      const data = await response.json();
+      setStations(data.stations);
+    } catch (err) {
+      console.error("Error fetching stations:", err);
+    }
+  };
+
+  // Filter source stations based on input
   useEffect(() => {
-    if (isProfileComplete) {
-      fetchProfile()
+    if (source.trim()) {
+      const filtered = stations.filter((station) =>
+        station.toLowerCase().includes(source.toLowerCase()),
+      );
+      setFilteredSourceStations(filtered);
+    } else {
+      setFilteredSourceStations([]);
     }
-  }, [isProfileComplete])
+  }, [source, stations]);
 
-  const fetchProfile = async () => {
-    try {
-      const { data } = await api.get('/api/profile/me')
-      setProfile(data.profile)
-      setJourneyInput({
-        source: data.profile?.homeLocation?.name || '',
-        destination: data.profile?.workLocation?.name || ''
-      })
-    } catch (error) {
-      console.error('Profile fetch failed:', error)
+  // Filter destination stations based on input
+  useEffect(() => {
+    if (destination.trim()) {
+      const filtered = stations.filter((station) =>
+        station.toLowerCase().includes(destination.toLowerCase()),
+      );
+      setFilteredDestStations(filtered);
+    } else {
+      setFilteredDestStations([]);
     }
-  }
+  }, [destination, stations]);
 
-  const handlePlanJourney = async () => {
-    if (!journeyInput.source || !journeyInput.destination) {
-      alert('Please enter both source and destination')
-      return
+  const handleSourceChange = (e) => {
+    setSource(e.target.value);
+    setSourceDropdown(true);
+    setError("");
+  };
+
+  const handleDestChange = (e) => {
+    setDestination(e.target.value);
+    setDestDropdown(true);
+    setError("");
+  };
+
+  const selectSource = (station) => {
+    setSource(station);
+    setSourceDropdown(false);
+  };
+
+  const selectDestination = (station) => {
+    setDestination(station);
+    setDestDropdown(false);
+  };
+
+  const searchRoutes = async () => {
+    if (!source.trim() || !destination.trim()) {
+      setError("Please enter both source and destination");
+      return;
     }
-    
-    setLoading(true)
-    setJourneyResult(null) // Clear previous results
+
+    setLoading(true);
+    setError("");
+    setSearchMessage("");
+    setRoutes([]);
+
     try {
-      const response = await api.post('/api/journey/plan', journeyInput)
-      
-      // Extract the actual journey data from the nested response
-      const journeyData = response.data?.data || response.data
-      
-      // Validate response structure
-      if (journeyData && journeyData.segments && Array.isArray(journeyData.segments)) {
-        setJourneyResult(journeyData)
-      } else {
-        console.error('Invalid journey data structure:', response.data)
-        alert('Received invalid journey data from server')
+      const response = await fetch("http://localhost:5000/api/journey/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          source: source.trim(),
+          destination: destination.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to find routes");
       }
-    } catch (error) {
-      console.error('Journey planning error:', error)
-      alert('Journey planning failed: ' + (error.response?.data?.message || 'Please try again'))
+
+      setRoutes(data.routes || []);
+      if (data.message) {
+        setSearchMessage(data.message);
+      }
+      if (data.directionHint) {
+        setSearchMessage((prev) =>
+          prev ? `${prev} ${data.directionHint}` : data.directionHint,
+        );
+      }
+    } catch (err) {
+      setError(err.message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const handleLogout = () => {
-    logout()
-    navigate('/login', { replace: true })
-  }
+  const swapStations = () => {
+    const temp = source;
+    setSource(destination);
+    setDestination(temp);
+  };
 
-  // Don't render anything if profile is not complete
-  if (!isProfileComplete) {
-    return null
-  }
+  const formatTime = (time) => {
+    if (
+      !time ||
+      time === "--" ||
+      time === "NOT ON" ||
+      time.includes("SUN") ||
+      time.includes("AC")
+    ) {
+      return time;
+    }
+    return time;
+  };
+
+  const calculateDuration = (startTime, endTime) => {
+    if (!startTime || !endTime || startTime === "--" || endTime === "--")
+      return "--";
+
+    const [startHour, startMin] = startTime.split(":").map(Number);
+    const [endHour, endMin] = endTime.split(":").map(Number);
+
+    let totalMinutes = endHour * 60 + endMin - (startHour * 60 + startMin);
+
+    // Handle overnight journeys
+    if (totalMinutes < 0) {
+      totalMinutes += 24 * 60;
+    }
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* TOP HORIZONTAL NAVBAR - FIXED */}
-      <nav className="bg-white/90 backdrop-blur-xl sticky top-0 z-50 border-b border-gray-200/50 shadow-lg">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            {/* LEFT: SAARTHI LOGO */}
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <span className="text-2xl font-bold text-white">S</span>
-              </div>
-              <h1 className="text-3xl font-black bg-gradient-to-r from-gray-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
-                SAARTHI
-              </h1>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-8 px-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-8"
+        >
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            🚆 Mumbai Local Train Journey Planner
+          </h1>
+          <p className="text-gray-600">
+            Find the best routes with timings and fares
+          </p>
+        </motion.div>
 
-            {/* RIGHT: USER INFO + LOGOUT */}
-            <div className="flex items-center space-x-6">
-              <div className="text-right">
-                <p className="text-xl font-bold text-gray-900">Hi, {user?.name}</p>
-                <p className="text-sm text-gray-500">Your daily commute companion</p>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white font-bold rounded-2xl hover:from-red-600 hover:to-red-700 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+        {/* Search Card */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-2xl shadow-xl p-6 mb-6"
+        >
+          <div className="space-y-4">
+            {/* Source Input */}
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                From (Source)
+              </label>
+              <input
+                type="text"
+                value={source}
+                onChange={handleSourceChange}
+                onFocus={() => setSourceDropdown(true)}
+                placeholder="Enter source station..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+              />
 
-      {/* MAIN CONTENT AREA */}
-      <main className="max-w-7xl mx-auto px-6 py-16 lg:px-8 -mt-4">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 lg:gap-16">
-          
-          {/* SECTION 1: JOURNEY INPUT */}
-          <div className="xl:col-span-1">
-            <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl p-10 border border-white/50">
-              <h2 className="text-4xl font-black text-gray-900 mb-2 flex items-center space-x-3">
-                <span>🚀</span>
-                <span>Plan Journey</span>
-              </h2>
-              <p className="text-xl text-gray-600 mb-10">Quick commute planning for today</p>
-              
-              <div className="space-y-8">
-                {/* SOURCE INPUT */}
-                <div className="space-y-3">
-                  <label className="flex items-center space-x-2 text-lg font-bold text-gray-900">
-                    <span>🏠</span>
-                    <span>Source</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={journeyInput.source}
-                    onChange={(e) => setJourneyInput({...journeyInput, source: e.target.value})}
-                    className="w-full px-6 py-5 text-lg border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 shadow-lg transition-all duration-200 hover:shadow-xl"
-                    placeholder="e.g., Andheri Station"
-                  />
-                  {profile?.homeLocation?.name && (
-                    <p className="text-sm text-blue-600 font-medium flex items-center space-x-1">
-                      <span>📍</span>
-                      <span>Auto-filled from profile: {profile.homeLocation.name}</span>
-                    </p>
-                  )}
-                </div>
-                
-                {/* DESTINATION INPUT */}
-                <div className="space-y-3">
-                  <label className="flex items-center space-x-2 text-lg font-bold text-gray-900">
-                    <span>🏢</span>
-                    <span>Destination</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={journeyInput.destination}
-                    onChange={(e) => setJourneyInput({...journeyInput, destination: e.target.value})}
-                    className="w-full px-6 py-5 text-lg border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 shadow-lg transition-all duration-200 hover:shadow-xl"
-                    placeholder="e.g., BKC Bandra"
-                  />
-                  {profile?.workLocation?.name && (
-                    <p className="text-sm text-green-600 font-medium flex items-center space-x-1">
-                      <span>📍</span>
-                      <span>Auto-filled from profile: {profile.workLocation.name}</span>
-                    </p>
-                  )}
-                </div>
-
-                {/* PLAN BUTTON */}
-                <button
-                  onClick={handlePlanJourney}
-                  disabled={loading || !journeyInput.source || !journeyInput.destination}
-                  className="w-full bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 text-white py-7 px-8 rounded-3xl font-black text-xl shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-4 group"
-                >
-                  <span className="text-2xl group-hover:rotate-12 transition-transform duration-300">
-                    {loading ? '⏳' : '🚀'}
-                  </span>
-                  <span>{loading ? 'Planning your commute...' : 'Plan My Journey'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 2: JOURNEY OUTPUT (Vertical Timeline) */}
-          {journeyResult && journeyResult.segments && journeyResult.segments.length > 0 && (
-            <div className="xl:col-span-1">
-              <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl p-10 border border-white/50 sticky top-24 h-fit">
-                <h2 className="text-4xl font-black text-gray-900 mb-2 flex items-center space-x-3">
-                  <span>🗺️</span>
-                  <span>Your Journey</span>
-                </h2>
-                
-                {/* JOURNEY SUMMARY CARDS */}
-                <div className="grid grid-cols-3 gap-6 mb-12 p-8 bg-gradient-to-r from-emerald-50 via-green-50 to-emerald-100 rounded-3xl border-2 border-emerald-200/50">
-                  <div className="text-center group">
-                    <div className="text-3xl lg:text-4xl font-black text-emerald-800 mb-1">
-                      {journeyResult.totalTime} min
-                    </div>
-                    <div className="text-sm uppercase tracking-widest font-bold text-emerald-700">
-                      Total Time
-                    </div>
-                  </div>
-                  <div className="text-center group">
-                    <div className="text-3xl lg:text-4xl font-black text-blue-800 mb-1">
-                      {journeyResult.transferCount || journeyResult.transfers || 0}
-                    </div>
-                    <div className="text-sm uppercase tracking-widest font-bold text-blue-700">
-                      Transfers
-                    </div>
-                  </div>
-                  <div className="text-center group">
-                    <div className="text-3xl lg:text-4xl font-black text-orange-600 mb-1">
-                      {journeyResult.riskPoints?.length || 0}
-                    </div>
-                    <div className="text-sm uppercase tracking-widest font-bold text-orange-600">
-                      Risk Points
-                    </div>
-                  </div>
-                </div>
-
-                {/* VERTICAL TIMELINE */}
-                <div className="relative">
-                  {/* START LINE */}
-                  <div className="flex items-center mb-10 pb-8 border-b-2 border-gray-200">
-                    <div className="w-12 h-12 bg-emerald-500 border-8 border-white rounded-full shadow-xl flex items-center justify-center mx-2 flex-shrink-0">
-                      <span className="text-2xl font-bold text-white">S</span>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-2xl font-bold text-gray-900">START</h3>
-                      <p className="text-xl text-gray-600 font-mono">{journeyResult.startTime}</p>
-                    </div>
-                  </div>
-
-                  {/* JOURNEY SEGMENTS */}
-                  <div className="space-y-10 mb-12">
-                    {journeyResult.segments?.map((segment, index) => (
-                      <div key={index} className="flex items-start group">
-                        {/* Timeline Dot */}
-                        <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full border-4 border-white shadow-lg -mt-3 flex-shrink-0 z-10 group-hover:scale-110 transition-all duration-200">
-                          <span className="text-xs font-bold text-white block w-6 h-6 leading-6 text-center">{index + 1}</span>
-                        </div>
-
-                        {/* Segment Content */}
-                        <div className="flex-1 ml-8 -mt-2 pb-8">
-                          {/* Mode & Duration */}
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 rounded-2xl text-white font-bold text-xl shadow-xl flex items-center space-x-3">
-                              <span className="text-2xl">{getModeIcon(segment.mode)}</span>
-                              <span>{segment.mode.toUpperCase()}</span>
-                              <span className="text-lg opacity-90">({segment.duration} min)</span>
-                            </div>
-                            {segment.riskNote && (
-                              <div className="ml-4 px-4 py-2 bg-orange-100 border border-orange-200 text-orange-800 font-bold rounded-xl shadow-md flex items-center space-x-2">
-                                <span>⚠️</span>
-                                <span className="text-sm">{segment.riskNote}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Route */}
-                          <div className="bg-gray-50 rounded-2xl p-5 mb-4 border-l-4 border-blue-400">
-                            <p className="text-lg font-semibold text-gray-900">
-                              {segment.from} <span className="text-2xl mx-2">→</span> {segment.to}
-                            </p>
-                          </div>
-
-                          {/* Timeline Line */}
-                          {index < (journeyResult.segments?.length || 0) - 1 && (
-                            <div className="absolute left-3 w-px h-full bg-gradient-to-b from-blue-400 to-transparent"></div>
-                          )}
+              {/* Source Dropdown */}
+              <AnimatePresence>
+                {sourceDropdown && filteredSourceStations.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                  >
+                    {filteredSourceStations.map((station, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => selectSource(station)}
+                        className="px-4 py-3 hover:bg-blue-50 cursor-pointer transition border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="flex items-center">
+                          <span className="text-blue-500 mr-2">📍</span>
+                          <span className="text-gray-800">{station}</span>
                         </div>
                       </div>
                     ))}
-                  </div>
-
-                  {/* END LINE */}
-                  <div className="flex items-center pt-8 border-t-2 border-emerald-300">
-                    <div className="w-12 h-12 bg-emerald-500 border-8 border-white rounded-full shadow-xl flex items-center justify-center mx-2 flex-shrink-0">
-                      <span className="text-2xl font-bold text-white">E</span>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-2xl font-bold text-gray-900">END</h3>
-                      <p className="text-xl text-gray-600 font-mono">{journeyResult.endTime}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
+
+            {/* Swap Button */}
+            <div className="flex justify-center">
+              <button
+                onClick={swapStations}
+                className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition"
+              >
+                <svg
+                  className="w-6 h-6 text-gray-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            {/* Destination Input */}
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                To (Destination)
+              </label>
+              <input
+                type="text"
+                value={destination}
+                onChange={handleDestChange}
+                onFocus={() => setDestDropdown(true)}
+                placeholder="Enter destination station..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition"
+              />
+
+              {/* Destination Dropdown */}
+              <AnimatePresence>
+                {destDropdown && filteredDestStations.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                  >
+                    {filteredDestStations.map((station, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => selectDestination(station)}
+                        className="px-4 py-3 hover:bg-purple-50 cursor-pointer transition border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="flex items-center">
+                          <span className="text-purple-500 mr-2">📍</span>
+                          <span className="text-gray-800">{station}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Search Button */}
+            <button
+              onClick={searchRoutes}
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? "Searching..." : "Search Trains"}
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Error Message */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6"
+          >
+            {error}
+          </motion.div>
+        )}
+
+        {/* Results */}
+        <AnimatePresence>
+          {routes.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="space-y-4"
+            >
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">
+                Available Routes ({routes.length})
+              </h2>
+
+              {routes.map((route, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                  className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition"
+                >
+                  {/* Route Header */}
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800">
+                        {route.isDirect
+                          ? "🚄 Direct Train"
+                          : "🔄 Train with Change"}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {route.segments.length} segment
+                        {route.segments.length > 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-green-600">
+                        ₹{route.totalFare}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {calculateDuration(
+                          route.segments[0].departureTime,
+                          route.segments[route.segments.length - 1].arrivalTime,
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Route Segments */}
+                  {route.segments.map((segment, segIdx) => (
+                    <div key={segIdx} className="mb-4 last:mb-0">
+                      {segIdx > 0 && (
+                        <div className="flex items-center my-3">
+                          <div className="flex-1 border-t-2 border-dashed border-yellow-400"></div>
+                          <span className="px-3 text-sm font-medium text-yellow-600 bg-yellow-50 rounded-full">
+                            Change train at {segment.fromStation}
+                          </span>
+                          <div className="flex-1 border-t-2 border-dashed border-yellow-400"></div>
+                        </div>
+                      )}
+
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-blue-600">
+                            Train: {segment.trainId}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            ₹{segment.fare}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                          <div className="flex-1">
+                            <div className="text-lg font-bold text-gray-800">
+                              {formatTime(segment.departureTime)}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {segment.fromStation}
+                            </div>
+                          </div>
+
+                          <div className="flex-1 flex items-center justify-center">
+                            <div className="flex items-center space-x-2 text-gray-400">
+                              <div className="h-px flex-1 bg-gray-300"></div>
+                              <span className="text-xs">
+                                {segment.stopsCount} stops
+                              </span>
+                              <div className="h-px flex-1 bg-gray-300"></div>
+                            </div>
+                          </div>
+
+                          <div className="flex-1 text-right">
+                            <div className="text-lg font-bold text-gray-800">
+                              {formatTime(segment.arrivalTime)}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {segment.toStation}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </motion.div>
+              ))}
+            </motion.div>
           )}
-        </div>
-      </main>
+        </AnimatePresence>
+
+        {/* No Results */}
+        {!loading && routes.length === 0 && source && destination && !error && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-12 bg-white rounded-xl shadow-lg"
+          >
+            <div className="text-6xl mb-4">🔍</div>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">
+              No Routes Found
+            </h3>
+            <p className="text-gray-500">
+              {searchMessage || "Try different stations or check spelling"}
+            </p>
+          </motion.div>
+        )}
+      </div>
     </div>
-  )
-}
+  );
+};
 
-// Helper function for mode icons
-const getModeIcon = (mode) => {
-  const icons = {
-    walk: '🚶',
-    train: '🚂',
-    bus: '🚌',
-    metro: '🚇'
-  }
-  return icons[mode.toLowerCase()] || '🚀'
-}
-
-export default JourneyDashboard
+export default Journey;
