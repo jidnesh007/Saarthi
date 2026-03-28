@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CrowdScope — Density Detection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --bg: #0a0b0e;
+            --surface: #111318;
+            --card: #161a22;
+            --border: #1e2330;
+            --border2: #2a3044;
+            --text: #e8eaf0;
+            --muted: #606880;
+            --accent: #3d6fff;
+            --accent2: #1a3db0;
+            --low: #22c55e;
+            --medium: #f59e0b;
+            --high: #ef4444;
+            --font: 'Syne', sans-serif;
+            --mono: 'DM Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            min-height: 100vh;
+            overflow-x: hidden
+        }
+
+        /* Scanline texture */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255, 255, 255, 0.012) 2px, rgba(255, 255, 255, 0.012) 4px);
+            pointer-events: none;
+            z-index: 9999
+        }
+
+        /* ── Header ───────────────────────────────────────────── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 32px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(10, 11, 14, 0.9);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            color: #fff;
+        }
+
+        .logo-text {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px
+        }
+
+        .logo-sub {
+            font-size: 11px;
+            color: var(--muted);
+            font-family: var(--mono);
+            letter-spacing: 1px;
+            margin-top: 1px
+        }
+
+        #model-badge {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 5px 12px;
+            border-radius: 20px;
+        }
+
+        /* ── Layout ───────────────────────────────────────────── */
+        .shell {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            min-height: calc(100vh - 65px)
+        }
+
+        /* ── Sidebar ──────────────────────────────────────────── */
+        aside {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 24px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            position: sticky;
+            top: 65px;
+            height: calc(100vh - 65px);
+            overflow-y: auto;
+        }
+
+        .nav-section {
+            padding: 8px 20px 4px;
+            font-size: 10px;
+            font-family: var(--mono);
+            letter-spacing: 2px;
+            color: var(--muted);
+            text-transform: uppercase
+        }
+
+        .nav-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 20px;
+            cursor: pointer;
+            font-family: var(--font);
+            font-size: 14px;
+            font-weight: 400;
+            color: var(--muted);
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            border-left: 3px solid transparent;
+            transition: all .15s;
+        }
+
+        .nav-btn:hover {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.04)
+        }
+
+        .nav-btn.active {
+            color: var(--text);
+            background: rgba(61, 111, 255, 0.08);
+            border-left-color: var(--accent);
+        }
+
+        .nav-icon {
+            font-size: 16px;
+            width: 20px;
+            text-align: center
+        }
+
+        /* ── Main area ────────────────────────────────────────── */
+        main {
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            min-width: 0
+        }
+
+        /* ── Tabs / panels ────────────────────────────────────── */
+        .panel {
+            display: none
+        }
+
+        .panel.active {
+            display: flex;
+            flex-direction: column;
+            gap: 24px
+        }
+
+        /* ── Cards ────────────────────────────────────────────── */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .card-title {
+            font-size: 12px;
+            font-family: var(--mono);
+            letter-spacing: 1.5px;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+
+        /* ── Upload zone ──────────────────────────────────────── */
+        .drop-zone {
+            border: 2px dashed var(--border2);
+            border-radius: 10px;
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(61, 111, 255, 0.05);
+        }
+
+        .drop-zone input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%
+        }
+
+        .drop-icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+            opacity: 0.5
+        }
+
+        .drop-label {
+            font-size: 15px;
+            color: var(--text);
+            font-weight: 700;
+            margin-bottom: 6px
+        }
+
+        .drop-sub {
+            font-size: 12px;
+            color: var(--muted);
+            font-family: var(--mono)
+        }
+
+        /* ── Controls row ─────────────────────────────────────── */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-end
+        }
+
+        .ctrl-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 140px
+        }
+
+        .ctrl-label {
+            font-size: 11px;
+            font-family: var(--mono);
+            color: var(--muted);
+            letter-spacing: 1px
+        }
+
+        .ctrl-label span {
+            color: var(--text);
+            font-weight: 500
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            height: 4px;
+            border-radius: 2px;
+            background: var(--border2);
+            outline: none;
+            width: 100%;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            border: 2px solid var(--bg);
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--muted)
+        }
+
+        .toggle {
+            position: relative;
+            width: 36px;
+            height: 20px
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute
+        }
+
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--border2);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: .2s;
+        }
+
+        .toggle-slider:before {
+            content: '';
+            position: absolute;
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: .2s;
+        }
+
+        .toggle input:checked+.toggle-slider {
+            background: var(--accent)
+        }
+
+        .toggle input:checked+.toggle-slider:before {
+            transform: translateX(16px)
+        }
+
+        /* ── Run button ───────────────────────────────────────── */
+        .btn-run {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-family: var(--font);
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+            transition: all .15s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-run:hover {
+            background: #5580ff;
+            transform: translateY(-1px)
+        }
+
+        .btn-run:active {
+            transform: translateY(0)
+        }
+
+        .btn-run:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none
+        }
+
+        .btn-danger {
+            background: #7f1d1d;
+            border: 1px solid var(--high);
+            color: var(--high)
+        }
+
+        .btn-danger:hover {
+            background: #991b1b
+        }
+
+        /* ── Results grid ─────────────────────────────────────── */
+        .result-grid {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 20px;
+            align-items: start
+        }
+
+        .result-image {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid var(--border)
+        }
+
+        .stats-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            min-width: 210px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .density-badge {
+            text-align: center;
+            padding: 14px;
+            border-radius: 8px;
+            font-weight: 800;
+            font-size: 22px;
+            letter-spacing: 1px;
+            border: 2px solid currentColor;
+        }
+
+        .density-badge.LOW {
+            color: var(--low);
+            background: rgba(34, 197, 94, 0.08)
+        }
+
+        .density-badge.MEDIUM {
+            color: var(--medium);
+            background: rgba(245, 158, 11, 0.08)
+        }
+
+        .density-badge.HIGH {
+            color: var(--high);
+            background: rgba(239, 68, 68, 0.08);
+            animation: pulse-red 1.5s ease-in-out infinite
+        }
+
+        @keyframes pulse-red {
+
+            0%,
+            100% {
+                box-shadow: none
+            }
+
+            50% {
+                box-shadow: 0 0 20px rgba(239, 68, 68, 0.3)
+            }
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px
+        }
+
+        .stat-row:last-child {
+            border: none
+        }
+
+        .stat-key {
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 11px
+        }
+
+        .stat-val {
+            font-weight: 700;
+            font-family: var(--mono)
+        }
+
+        .count-big {
+            font-size: 40px;
+            font-weight: 800;
+            text-align: center;
+            line-height: 1
+        }
+
+        .count-label {
+            font-size: 11px;
+            color: var(--muted);
+            font-family: var(--mono);
+            text-align: center;
+            letter-spacing: 1px;
+            margin-top: 4px
+        }
+
+        /* ── Alert banner ─────────────────────────────────────── */
+        .alert {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--high);
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .alert::before {
+            content: '⚠';
+            font-size: 16px
+        }
+
+        /* ── Progress bar ─────────────────────────────────────── */
+        .progress-wrap {
+            background: var(--border);
+            border-radius: 4px;
+            height: 6px;
+            overflow: hidden
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 4px;
+            width: 0%;
+            transition: width .3s
+        }
+
+        /* ── Log box ──────────────────────────────────────────── */
+        .log-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--muted);
+            max-height: 150px;
+            overflow-y: auto;
+            line-height: 1.7;
+        }
+
+        /* ── Webcam ───────────────────────────────────────────── */
+        .webcam-grid {
+            display: grid;
+            grid-template-columns: 1fr 220px;
+            gap: 20px;
+            align-items: start
+        }
+
+        .webcam-feed {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            aspect-ratio: 4/3;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .webcam-feed img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none
+        }
+
+        .webcam-placeholder {
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 12px;
+            text-align: center
+        }
+
+        .webcam-placeholder div:first-child {
+            font-size: 40px;
+            margin-bottom: 10px;
+            opacity: .3
+        }
+
+        .cam-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--high);
+            animation: blink 1s ease-in-out infinite;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: 0.3
+            }
+        }
+
+        .live-hidden {
+            display: none
+        }
+
+        /* ── Summary chips (video) ────────────────────────────── */
+        .summary-chips {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap
+        }
+
+        .chip {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 500
+        }
+
+        .chip.LOW {
+            color: var(--low);
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3)
+        }
+
+        .chip.MEDIUM {
+            color: var(--medium);
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3)
+        }
+
+        .chip.HIGH {
+            color: var(--high);
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3)
+        }
+
+        /* ── Spinner ──────────────────────────────────────────── */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        .hidden {
+            display: none !important
+        }
+
+        /* ── Divider ──────────────────────────────────────────── */
+        hr.divider {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 4px 0
+        }
+
+        /* ── Responsive ───────────────────────────────────────── */
+        @media(max-width:900px) {
+            .shell {
+                grid-template-columns: 1fr
+            }
+
+            aside {
+                display: flex;
+                flex-direction: row;
+                height: auto;
+                position: static;
+                overflow-x: auto;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                padding: 8px 12px
+            }
+
+            .nav-section {
+                display: none
+            }
+
+            .result-grid,
+            .webcam-grid {
+                grid-template-columns: 1fr
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">
+            <div class="logo-icon">CS</div>
+            <div>
+                <div class="logo-text">CrowdScope</div>
+                <div class="logo-sub">DENSITY DETECTION SYSTEM</div>
+            </div>
+        </div>
+        <div id="model-badge">Loading model…</div>
+    </header>
+
+    <div class="shell">
+        <!-- Sidebar -->
+        <aside>
+            <div class="nav-section">Detection</div>
+            <button class="nav-btn active" data-panel="image" onclick="switchPanel(this)">
+                <span class="nav-icon">🖼</span> Image
+            </button>
+            <button class="nav-btn" data-panel="video" onclick="switchPanel(this)">
+                <span class="nav-icon">🎬</span> Video
+            </button>
+            <button class="nav-btn" data-panel="webcam" onclick="switchPanel(this)">
+                <span class="nav-icon">📷</span> Webcam
+            </button>
+            <hr class="divider" style="margin:12px 20px" />
+            <div class="nav-section">Settings</div>
+            <button class="nav-btn" data-panel="settings" onclick="switchPanel(this)">
+                <span class="nav-icon">⚙</span> Configuration
+            </button>
+        </aside>
+
+        <!-- Main -->
+        <main>
+
+            <!-- ── IMAGE PANEL ──────────────────────────────── -->
+            <div class="panel active" id="panel-image">
+                <div class="card">
+                    <div class="card-title">Upload Image</div>
+                    <div class="drop-zone" id="img-drop"
+                        ondragover="e=event;e.preventDefault();this.classList.add('dragover')"
+                        ondragleave="this.classList.remove('dragover')"
+                        ondrop="e=event;e.preventDefault();this.classList.remove('dragover');handleImgDrop(e)">
+                        <input type="file" accept="image/*" onchange="handleImgFile(this)" />
+                        <div class="drop-icon">🖼</div>
+                        <div class="drop-label" id="img-drop-label">Drop image here or click to browse</div>
+                        <div class="drop-sub">JPG · PNG · BMP · WEBP</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Parameters</div>
+                    <div class="controls">
+                        <div class="ctrl-group">
+                            <div class="ctrl-label">Confidence — <span id="conf-val">0.18</span></div>
+                            <input type="range" min="0.05" max="0.50" step="0.01" value="0.18"
+                                oninput="document.getElementById('conf-val').textContent=parseFloat(this.value).toFixed(2);imgConf=parseFloat(this.value)" />
+                        </div>
+                        <div class="ctrl-group">
+                            <div class="ctrl-label">Tile Grid — <span id="tile-val">3</span>×<span
+                                    id="tile-val2">3</span></div>
+                            <input type="range" min="1" max="5" step="1" value="3"
+                                oninput="document.getElementById('tile-val').textContent=this.value;document.getElementById('tile-val2').textContent=this.value;imgTiles=parseInt(this.value)" />
+                        </div>
+                        <div class="ctrl-group" style="justify-content:flex-end">
+                            <label class="toggle-row">
+                                <span class="toggle"><input type="checkbox" id="heatmap-tog" checked />
+                                    <span class="toggle-slider"></span></span>
+                                Heatmap overlay
+                            </label>
+                        </div>
+                        <button class="btn-run" id="btn-img" onclick="runImage()" disabled>
+                            <div class="spinner hidden" id="img-spin"></div>
+                            <span>Analyse</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card hidden" id="img-result-card">
+                    <div class="card-title">Result</div>
+                    <div class="result-grid">
+                        <img id="img-result" class="result-image" src="" alt="Result" />
+                        <div class="stats-panel">
+                            <div id="density-badge" class="density-badge">--</div>
+                            <div class="count-big" id="stat-count">--</div>
+                            <div class="count-label">PEOPLE DETECTED</div>
+                            <div id="alert-banner" class="alert hidden">Overcrowding Detected</div>
+                            <div class="stat-row">
+                                <span class="stat-key">Score</span>
+                                <span class="stat-val" id="stat-score">--</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-key">Overlap</span>
+                                <span class="stat-val" id="stat-overlap">--</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-key">Avg box</span>
+                                <span class="stat-val" id="stat-area">--</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-key">Spread</span>
+                                <span class="stat-val" id="stat-spread">--</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-key">Time</span>
+                                <span class="stat-val" id="stat-time">--</span>
+                            </div>
+                            <button class="btn-run" style="font-size:12px;padding:9px 14px;margin-top:4px"
+                                onclick="downloadResult()">⬇ Download</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── VIDEO PANEL ──────────────────────────────── -->
+            <div class="panel" id="panel-video">
+                <div class="card">
+                    <div class="card-title">Upload Video</div>
+                    <div class="drop-zone" id="vid-drop"
+                        ondragover="e=event;e.preventDefault();this.classList.add('dragover')"
+                        ondragleave="this.classList.remove('dragover')"
+                        ondrop="e=event;e.preventDefault();this.classList.remove('dragover');handleVidDrop(e)">
+                        <input type="file" accept="video/*" onchange="handleVidFile(this)" />
+                        <div class="drop-icon">🎬</div>
+                        <div class="drop-label" id="vid-drop-label">Drop video here or click to browse</div>
+                        <div class="drop-sub">MP4 · AVI · MOV · MKV</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Parameters</div>
+                    <div class="controls">
+                        <div class="ctrl-group">
+                            <div class="ctrl-label">Confidence — <span id="vconf-val">0.18</span></div>
+                            <input type="range" min="0.05" max="0.50" step="0.01" value="0.18"
+                                oninput="document.getElementById('vconf-val').textContent=parseFloat(this.value).toFixed(2);vidConf=parseFloat(this.value)" />
+                        </div>
+                        <div class="ctrl-group">
+                            <div class="ctrl-label">Skip Frames — <span id="skip-val">2</span></div>
+                            <input type="range" min="1" max="5" step="1" value="2"
+                                oninput="document.getElementById('skip-val').textContent=this.value;vidSkip=parseInt(this.value)" />
+                        </div>
+                        <div class="ctrl-group" style="justify-content:flex-end">
+                            <label class="toggle-row">
+                                <span class="toggle"><input type="checkbox" id="vheatmap-tog" checked />
+                                    <span class="toggle-slider"></span></span>
+                                Heatmap overlay
+                            </label>
+                        </div>
+                        <button class="btn-run" id="btn-vid" onclick="runVideo()" disabled>
+                            <div class="spinner hidden" id="vid-spin"></div>
+                            <span>Process Video</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card hidden" id="vid-progress-card">
+                    <div class="card-title">Processing</div>
+                    <div class="progress-wrap" style="margin-bottom:10px">
+                        <div class="progress-bar" id="vid-bar"></div>
+                    </div>
+                    <div id="vid-pct"
+                        style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:10px">0%</div>
+                    <div class="log-box" id="vid-log">Waiting…</div>
+                </div>
+
+                <div class="card hidden" id="vid-result-card">
+                    <div class="card-title">Result</div>
+                    <video id="vid-result" controls
+                        style="width:100%;border-radius:10px;border:1px solid var(--border)"></video>
+                    <div style="margin-top:16px">
+                        <div class="card-title">Density Distribution</div>
+                        <div class="summary-chips" id="vid-summary"></div>
+                    </div>
+                    <button class="btn-run" style="margin-top:16px;font-size:13px" onclick="downloadVideo()">
+                        ⬇ Download Video
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── WEBCAM PANEL ─────────────────────────────── -->
+            <div class="panel" id="panel-webcam">
+                <div class="card">
+                    <div class="card-title">Live Webcam Feed</div>
+                    <div class="webcam-grid">
+                        <div class="webcam-feed" id="cam-feed-box">
+                            <div class="webcam-placeholder" id="cam-placeholder">
+                                <div>📷</div>
+                                <div>Camera not started</div>
+                            </div>
+                            <img id="cam-img" alt="Webcam feed" />
+                        </div>
+                        <div class="cam-controls">
+                            <div class="stats-panel" style="min-width:unset">
+                                <div
+                                    style="display:flex;align-items:center;font-size:12px;color:var(--muted);font-family:var(--mono)">
+                                    <span class="live-dot live-hidden" id="live-dot"></span>
+                                    <span id="live-label">OFFLINE</span>
+                                </div>
+                                <div id="cam-density" class="density-badge" style="font-size:18px">--</div>
+                                <div class="count-big" id="cam-count" style="font-size:32px">--</div>
+                                <div class="count-label">PEOPLE</div>
+                                <div class="stat-row">
+                                    <span class="stat-key">Score</span>
+                                    <span class="stat-val" id="cam-score">--</span>
+                                </div>
+                            </div>
+
+                            <div style="font-size:11px;color:var(--muted);font-family:var(--mono);text-align:center;padding:6px 0">
+                                Using Camera 0 (built-in)
+                            </div>
+
+                            <button class="btn-run" id="btn-cam-start" onclick="startWebcam()">
+                                ▶ Start
+                            </button>
+                            <button class="btn-run btn-danger hidden" id="btn-cam-stop" onclick="stopWebcam()">
+                                ■ Stop
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── SETTINGS PANEL ───────────────────────────── -->
+            <div class="panel" id="panel-settings">
+                <div class="card">
+                    <div class="card-title">Model Configuration</div>
+                    <div class="controls" style="flex-direction:column;align-items:flex-start;gap:20px">
+                        <div style="width:100%">
+                            <div class="ctrl-label" style="margin-bottom:8px">Model Path</div>
+                            <div style="display:flex;gap:10px">
+                                <input id="model-path-input" type="text" value="yolov8s.pt"
+                                    placeholder="yolov8s.pt or path/to/best.pt" style="flex:1;background:var(--surface);color:var(--text);
+                     border:1px solid var(--border2);padding:10px 14px;
+                     border-radius:8px;font-family:var(--mono);font-size:13px" />
+                                <button class="btn-run" style="white-space:nowrap" onclick="reloadModel()">
+                                    Reload Model
+                                </button>
+                            </div>
+                            <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:8px">
+                                Use "yolov8s.pt" for pretrained, or full path to your trained best.pt from Colab
+                            </div>
+                        </div>
+                        <div style="background:var(--surface);border:1px solid var(--border);
+               border-radius:8px;padding:16px;width:100%;font-family:var(--mono);font-size:12px">
+                            <div style="color:var(--muted);margin-bottom:8px">DENSITY THRESHOLDS</div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px">
+                                <div style="color:var(--low)">LOW<br><span style="font-size:18px;font-weight:700">score
+                                        &lt; 0.30</span><br><span style="color:var(--muted)">≈ 0–15 people</span></div>
+                                <div style="color:var(--medium)">MEDIUM<br><span
+                                        style="font-size:18px;font-weight:700">0.30–0.60</span><br><span
+                                        style="color:var(--muted)">≈ 15–40 people</span></div>
+                                <div style="color:var(--high)">HIGH<br><span
+                                        style="font-size:18px;font-weight:700">score &gt; 0.60</span><br><span
+                                        style="color:var(--muted)">≈ 40+ people</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Quick Setup</div>
+                    <div class="log-box" style="max-height:unset;color:var(--text);line-height:2">
+                        <span style="color:var(--accent)"># Install dependencies</span><br>
+                        pip install flask ultralytics opencv-python numpy<br><br>
+                        <span style="color:var(--accent)"># Run with pretrained model</span><br>
+                        python app.py<br><br>
+                        <span style="color:var(--accent)"># Run with your trained Colab model</span><br>
+                        MODEL_PATH=runs/crowd/crowd_v2/weights/best.pt python app.py<br><br>
+                        <span style="color:var(--accent)"># Then open browser</span><br>
+                        http://localhost:5000
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        // ── State ──────────────────────────────────────────────────
+        let imgFile = null, vidFile = null
+        let imgConf = 0.18, imgTiles = 3
+        let vidConf = 0.18, vidSkip = 2
+        let currentJobId = null, pollInterval = null
+        let webcamActive = false, webcamStatInterval = null
+        let lastOutputFilename = null, lastVideoFilename = null
+
+        // ── Panel switching ────────────────────────────────────────
+        function switchPanel(btn) {
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'))
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'))
+            btn.classList.add('active')
+            document.getElementById('panel-' + btn.dataset.panel).classList.add('active')
+        }
+
+        // ── Model info ─────────────────────────────────────────────
+        async function loadModelInfo() {
+            try {
+                const r = await fetch('/api/model-info')
+                const d = await r.json()
+                document.getElementById('model-badge').textContent = '⬡ ' + d.model
+                document.getElementById('model-path-input').value = d.model
+            } catch (e) {
+                document.getElementById('model-badge').textContent = 'Model: unknown'
+            }
+        }
+        loadModelInfo()
+
+        // ── Image handling ─────────────────────────────────────────
+        function handleImgDrop(e) {
+            const f = e.dataTransfer.files[0]
+            if (f) setImgFile(f)
+        }
+        function handleImgFile(inp) { if (inp.files[0]) setImgFile(inp.files[0]) }
+        function setImgFile(f) {
+            imgFile = f
+            document.getElementById('img-drop-label').textContent = f.name
+            document.getElementById('btn-img').disabled = false
+        }
+
+        async function runImage() {
+            if (!imgFile) return
+            const btn = document.getElementById('btn-img')
+            const spin = document.getElementById('img-spin')
+            btn.disabled = true; spin.classList.remove('hidden')
+            document.getElementById('img-result-card').classList.add('hidden')
+
+            const fd = new FormData()
+            fd.append('file', imgFile)
+            fd.append('conf', imgConf)
+            fd.append('tiles', imgTiles)
+            fd.append('heatmap', document.getElementById('heatmap-tog').checked)
+
+            try {
+                const r = await fetch('/api/image', { method: 'POST', body: fd })
+                const d = await r.json()
+                if (d.error) { alert('Error: ' + d.error); return }
+
+                lastOutputFilename = d.filename
+                document.getElementById('img-result').src = d.image
+                setDensityBadge('density-badge', d.level)
+                document.getElementById('stat-count').textContent = d.count
+                document.getElementById('stat-score').textContent = d.score.toFixed(3)
+                document.getElementById('stat-overlap').textContent = d.overlap.toFixed(3)
+                document.getElementById('stat-area').textContent = d.avg_area.toFixed(5)
+                document.getElementById('stat-spread').textContent = d.spread.toFixed(3)
+                document.getElementById('stat-time').textContent = d.time + 's'
+
+                const alertEl = document.getElementById('alert-banner')
+                if (d.level === 'HIGH') alertEl.classList.remove('hidden')
+                else alertEl.classList.add('hidden')
+
+                document.getElementById('img-result-card').classList.remove('hidden')
+                document.getElementById('img-result-card').scrollIntoView({ behavior: 'smooth', block: 'start' })
+            } catch (e) {
+                alert('Request failed: ' + e.message)
+            } finally {
+                btn.disabled = false; spin.classList.add('hidden')
+            }
+        }
+
+        function downloadResult() {
+            if (lastOutputFilename) window.open('/outputs/' + lastOutputFilename, '_blank')
+        }
+
+        // ── Video handling ─────────────────────────────────────────
+        function handleVidDrop(e) { const f = e.dataTransfer.files[0]; if (f) setVidFile(f) }
+        function handleVidFile(inp) { if (inp.files[0]) setVidFile(inp.files[0]) }
+        function setVidFile(f) {
+            vidFile = f
+            document.getElementById('vid-drop-label').textContent = f.name
+            document.getElementById('btn-vid').disabled = false
+        }
+
+        async function runVideo() {
+            if (!vidFile) return
+            const btn = document.getElementById('btn-vid')
+            const spin = document.getElementById('vid-spin')
+            btn.disabled = true; spin.classList.remove('hidden')
+            document.getElementById('vid-progress-card').classList.remove('hidden')
+            document.getElementById('vid-result-card').classList.add('hidden')
+            document.getElementById('vid-bar').style.width = '0%'
+            document.getElementById('vid-log').textContent = 'Starting…'
+
+            const fd = new FormData()
+            fd.append('file', vidFile)
+            fd.append('conf', vidConf)
+            fd.append('skip', vidSkip)
+            fd.append('heatmap', document.getElementById('vheatmap-tog').checked)
+
+            try {
+                const r = await fetch('/api/video', { method: 'POST', body: fd })
+                const d = await r.json()
+                if (d.error) { alert('Error: ' + d.error); return }
+                currentJobId = d.job_id
+                lastVideoFilename = null
+                pollInterval = setInterval(pollVideoProgress, 1000)
+            } catch (e) {
+                alert('Upload failed: ' + e.message)
+                btn.disabled = false; spin.classList.add('hidden')
+            }
+        }
+
+        async function pollVideoProgress() {
+            if (!currentJobId) return
+            const r = await fetch('/api/video/progress/' + currentJobId)
+            const d = await r.json()
+
+            document.getElementById('vid-bar').style.width = d.progress + '%'
+            document.getElementById('vid-pct').textContent = d.progress + '%'
+            if (d.log && d.log.length)
+                document.getElementById('vid-log').textContent = d.log.slice(-5).join('\n')
+
+            if (d.status === 'done') {
+                clearInterval(pollInterval)
+                lastVideoFilename = d.filename
+                document.getElementById('vid-result').src = '/outputs/' + d.filename
+                document.getElementById('vid-result-card').classList.remove('hidden')
+
+                if (d.summary) {
+                    const chips = document.getElementById('vid-summary')
+                    chips.innerHTML = ''
+                    for (const [level, pct] of Object.entries(d.summary)) {
+                        const el = document.createElement('div')
+                        el.className = 'chip ' + level
+                        el.textContent = level + ': ' + pct
+                        chips.appendChild(el)
+                    }
+                }
+                document.getElementById('btn-vid').disabled = false
+                document.getElementById('vid-spin').classList.add('hidden')
+                document.getElementById('vid-result-card').scrollIntoView({ behavior: 'smooth' })
+            }
+        }
+
+        function downloadVideo() {
+            if (lastVideoFilename) window.open('/outputs/' + lastVideoFilename, '_blank')
+        }
+
+        // ── Webcam ─────────────────────────────────────────────────
+        async function startWebcam() {
+            document.getElementById('btn-cam-start').disabled = true
+            const r = await fetch('/api/webcam/start', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            })
+            const d = await r.json()
+            if (d.error) {
+                alert('Camera error: ' + d.error)
+                document.getElementById('btn-cam-start').disabled = false
+                return
+            }
+
+            webcamActive = true
+            // Add cache-busting param so browser fetches a fresh stream
+            document.getElementById('cam-img').src = '/api/webcam/feed?t=' + Date.now()
+            document.getElementById('cam-img').style.display = 'block'
+            document.getElementById('cam-placeholder').style.display = 'none'
+            document.getElementById('live-dot').classList.remove('live-hidden')
+            document.getElementById('live-label').textContent = 'LIVE'
+            document.getElementById('btn-cam-start').classList.add('hidden')
+            document.getElementById('btn-cam-stop').classList.remove('hidden')
+
+            webcamStatInterval = setInterval(pollWebcamStats, 500)
+        }
+
+        async function stopWebcam() {
+            await fetch('/api/webcam/stop', { method: 'POST' })
+            webcamActive = false
+            clearInterval(webcamStatInterval)
+            document.getElementById('cam-img').style.display = 'none'
+            document.getElementById('cam-placeholder').style.display = 'flex'
+            document.getElementById('live-dot').classList.add('live-hidden')
+            document.getElementById('live-label').textContent = 'OFFLINE'
+            document.getElementById('btn-cam-start').classList.remove('hidden')
+            document.getElementById('btn-cam-stop').classList.add('hidden')
+            setDensityBadge('cam-density', '--')
+            document.getElementById('cam-count').textContent = '--'
+            document.getElementById('cam-score').textContent = '--'
+        }
+
+        async function pollWebcamStats() {
+            if (!webcamActive) return
+            const r = await fetch('/api/webcam/stats')
+            const d = await r.json()
+            setDensityBadge('cam-density', d.level)
+            document.getElementById('cam-count').textContent = d.count
+            document.getElementById('cam-score').textContent = d.score
+        }
+
+        // ── Utility ────────────────────────────────────────────────
+        function setDensityBadge(id, level) {
+            const el = document.getElementById(id)
+            el.className = 'density-badge' + (level === 'LOW' || level === 'MEDIUM' || level === 'HIGH' ? ' ' + level : '')
+            el.textContent = level
+        }
+
+        async function reloadModel() {
+            const p = document.getElementById('model-path-input').value.trim()
+            alert('To change the model, set MODEL_PATH=' + p + ' and restart app.py.\n\nExample:\nMODEL_PATH="' + p + '" python app.py')
+        }
+    </script>
+</body>
+
+</html>

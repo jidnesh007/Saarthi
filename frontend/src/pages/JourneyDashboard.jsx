@@ -1,212 +1,376 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Bus, 
-  Train, 
-  Car, 
-  Navigation, 
-  Clock, 
-  CheckCircle2, 
-  ChevronRight,
-  Info,
-  MapPin,
-  ArrowRight,
-  Bell,
-  X,
-  Users,
-  Radio, 
-} from 'lucide-react';
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
-// Import your SmartAlerts component
-import SmartAlerts from '../components/SmartAlerts'; 
+/* ─── Crowd config ─────────────────────────────────────────── */
+const CROWD = {
+  LOW:    { color: "#22c55e", bg: "rgba(34,197,94,0.10)",  emoji: "🟢", label: "Low Crowd"    },
+  MEDIUM: { color: "#f59e0b", bg: "rgba(245,158,11,0.10)", emoji: "🟡", label: "Moderate"     },
+  HIGH:   { color: "#ef4444", bg: "rgba(239,68,68,0.10)",  emoji: "🔴", label: "High Crowd"   },
+};
 
-const JourneyDashboard = () => {
-  const [isCommunityOpen, setIsCommunityOpen] = useState(false);
-  const [isSmartAlertsOpen, setIsSmartAlertsOpen] = useState(false);
+const ADVICE = {
+  LOW:    "Great time to travel — comfortable journey expected.",
+  MEDIUM: "Moderate crowd. Arrive a few minutes early.",
+  HIGH:   "Peak hours! Expect heavy crowd. Consider alternate timings.",
+};
 
-  const options = [
-    { title: "Low Cost", transport: "Bus + Train", cost: "₹40–₹60", time: "90 min", comfort: "Low", crowd: "High", gradient: "from-orange-500 to-red-600", desc: "Cheapest but crowded and tiring" },
-    { title: "Balanced Option", transport: "Train + Auto", cost: "₹80–₹120", time: "75 min", comfort: "Medium", crowd: "Medium", gradient: "from-blue-600 to-indigo-700", recommended: true, desc: "Best balance of time and comfort" },
-    { title: "High Comfort", transport: "Cab", cost: "₹400–₹600", time: "60 min", comfort: "High", crowd: "Low", gradient: "from-emerald-500 to-teal-600", desc: "Fastest and most comfortable but expensive" }
-  ];
+/* Snap HH:MM to nearest dataset slot (30-min grid) */
+function snapSlot(t) {
+  if (!t || t === "--") return null;
+  const [h, m] = t.split(":").map(Number);
+  const snappedM = m < 15 ? 0 : m < 45 ? 30 : 0;
+  const snappedH = m >= 45 ? (h + 1) % 24 : h;
+  return `${String(snappedH).padStart(2, "0")}:${String(snappedM).padStart(2, "0")}`;
+}
 
-  const communityAlerts = [
-    { id: 1, user: "Rahul M.", text: "⚠️ Dadar–Panvel local running slow.", side: "left", type: "delay" },
-    { id: 2, user: "SAARTHI", text: "🚦 Traffic heavy at Vashi bridge.", side: "right", type: "warning" }
-  ];
+/* Pick best crowd station slug based on station name string */
+function stationToSlug(name) {
+  const n = (name || "").toLowerCase();
+  if (n.includes("dadar"))    return "dadar";
+  if (n.includes("panvel"))   return "panvel";
+  if (n.includes("kurla"))    return "kurla";
+  if (n.includes("csmt") || n.includes("cst") || n.includes("victoria")) return "csmt";
+  if (n.includes("thane"))    return "thane";
+  if (n.includes("borivali") || n.includes("borivli")) return "borivali";
+  return "dadar"; // generic fallback
+}
 
-  const containerVars = { animate: { transition: { staggerChildren: 0.1 } } };
-  const itemVars = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.5 } }
+/* ─── Component ─────────────────────────────────────────────── */
+const Journey = () => {
+  const [stations,              setStations]              = useState([]);
+  const [source,                setSource]                = useState("");
+  const [destination,           setDestination]           = useState("");
+  const [sourceDropdown,        setSourceDropdown]        = useState(false);
+  const [destDropdown,          setDestDropdown]          = useState(false);
+  const [filteredSourceStations,setFilteredSourceStations]= useState([]);
+  const [filteredDestStations,  setFilteredDestStations]  = useState([]);
+  const [routes,                setRoutes]                = useState([]);
+  const [crowdMap,              setCrowdMap]              = useState({});   // idx -> crowd info
+  const [loading,               setLoading]               = useState(false);
+  const [error,                 setError]                 = useState("");
+  const [searchMessage,         setSearchMessage]         = useState("");
+
+  useEffect(() => { fetchStations(); }, []);
+
+  const fetchStations = async () => {
+    try {
+      const r = await fetch("http://localhost:5000/api/journey/stations");
+      const d = await r.json();
+      setStations(d.stations || []);
+    } catch (e) { console.error(e); }
   };
 
+  useEffect(() => {
+    if (source.trim()) {
+      setFilteredSourceStations(stations.filter(s => s.toLowerCase().includes(source.toLowerCase())));
+    } else {
+      setFilteredSourceStations([]);
+    }
+  }, [source, stations]);
+
+  useEffect(() => {
+    if (destination.trim()) {
+      setFilteredDestStations(stations.filter(s => s.toLowerCase().includes(destination.toLowerCase())));
+    } else {
+      setFilteredDestStations([]);
+    }
+  }, [destination, stations]);
+
+  const selectSource      = (s) => { setSource(s);      setSourceDropdown(false); };
+  const selectDestination = (s) => { setDestination(s); setDestDropdown(false);   };
+  const swapStations      = ()  => { const t = source; setSource(destination); setDestination(t); };
+
+  /* ─── Crowd fetch per route ─────────────────────────────── */
+  const fetchCrowdForRoutes = async (fetchedRoutes) => {
+    const now     = new Date();
+    const dayType = now.getDay() === 0 || now.getDay() === 6 ? "weekend" : "weekday";
+    const slug    = stationToSlug(source);
+
+    const results = await Promise.all(
+      fetchedRoutes.map(async (route, idx) => {
+        const dept = route.segments?.[0]?.departureTime;
+        const slot = snapSlot(dept);
+        if (!slot) return [idx, null];
+        try {
+          const r = await fetch(
+            `http://localhost:5000/api/crowd/predict?station=${slug}&time=${slot}&day=${dayType}`
+          );
+          const d = await r.json();
+          return [idx, d.success ? d : null];
+        } catch {
+          return [idx, null];
+        }
+      })
+    );
+
+    const map = {};
+    results.forEach(([idx, data]) => { if (data) map[idx] = data; });
+    setCrowdMap(map);
+  };
+
+  /* ─── Search ────────────────────────────────────────────── */
+  const searchRoutes = async () => {
+    if (!source.trim() || !destination.trim()) {
+      setError("Please enter both source and destination");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setSearchMessage("");
+    setRoutes([]);
+    setCrowdMap({});
+
+    try {
+      const r = await fetch("http://localhost:5000/api/journey/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: source.trim(), destination: destination.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Failed to find routes");
+
+      const fetched = d.routes || [];
+      setRoutes(fetched);
+      if (d.message)       setSearchMessage(d.message);
+      if (d.directionHint) setSearchMessage(p => p ? `${p} ${d.directionHint}` : d.directionHint);
+
+      // Fetch crowd info for all routes in parallel
+      if (fetched.length > 0) fetchCrowdForRoutes(fetched);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ─── Helpers ───────────────────────────────────────────── */
+  const calculateDuration = (start, end) => {
+    if (!start || !end || start === "--" || end === "--") return "--";
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    let mins = eh * 60 + em - (sh * 60 + sm);
+    if (mins < 0) mins += 1440;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+
+  /* ─── Render ─────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 selection:bg-blue-100">
-      
-      {/* ================= MODALS & OVERLAYS ================= */}
-      <AnimatePresence>
-        {/* 1. Community Hub Modal (WhatsApp Style) */}
-        {isCommunityOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCommunityOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white w-full max-w-xl h-[75vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden border border-slate-200">
-              <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20"><Users size={24} /></div>
-                  <h2 className="text-2xl font-black tracking-tight">Community Hub</h2>
-                </div>
-                <button onClick={() => setIsCommunityOpen(false)} className="bg-white/10 p-3 rounded-full hover:bg-white/20"><X size={20} /></button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/50">
-                {communityAlerts.map((alert) => (
-                  <div key={alert.id} className={`flex ${alert.side === 'right' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-[2rem] p-6 shadow-sm border ${alert.type === 'delay' ? 'bg-red-50 border-red-100' : 'bg-white border-slate-200'}`}>
-                      <p className="text-sm font-bold text-slate-800">{alert.text}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        )}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-8 px-4">
+      <div className="max-w-4xl mx-auto">
 
-        {/* 2. Smart Alerts Center (Intelligence Layer) - CENTERED MODAL */}
-        {isSmartAlertsOpen && (
-          <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 md:p-10">
-            {/* Background Blur */}
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              onClick={() => setIsSmartAlertsOpen(false)} 
-              className="absolute inset-0 bg-blue-900/20 backdrop-blur-xl" 
-            />
-            
-            {/* Centered Intelligence Card */}
-            <motion.div 
-              initial={{ scale: 0.8, opacity: 0, y: 50 }} 
-              animate={{ scale: 1, opacity: 1, y: 0 }} 
-              exit={{ scale: 0.8, opacity: 0, y: 50 }} 
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="relative w-full max-w-5xl h-[85vh] bg-white/90 rounded-[3.5rem] shadow-[0_32px_64px_-15px_rgba(0,0,0,0.3)] border border-white flex flex-col overflow-hidden"
-            >
-              {/* Floating Close Button */}
-              <button 
-                onClick={() => setIsSmartAlertsOpen(false)} 
-                className="absolute top-8 right-8 z-[260] p-4 bg-slate-900 text-white rounded-full shadow-2xl hover:bg-red-600 hover:scale-110 transition-all duration-300"
-              >
-                <X size={24} />
+        {/* Header */}
+        <motion.div initial={{ opacity:0, y:-20 }} animate={{ opacity:1, y:0 }} className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">🚆 Mumbai Local Train Journey Planner</h1>
+          <p className="text-gray-600">Find the best routes with live crowd levels, timings & fares</p>
+        </motion.div>
+
+        {/* Search Card */}
+        <motion.div initial={{ opacity:0, scale:0.95 }} animate={{ opacity:1, scale:1 }}
+          className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+          <div className="space-y-4">
+
+            {/* Source */}
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-2">From (Source)</label>
+              <input type="text" value={source}
+                onChange={e => { setSource(e.target.value); setSourceDropdown(true); setError(""); }}
+                onFocus={() => setSourceDropdown(true)}
+                placeholder="Enter source station..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+              />
+              <AnimatePresence>
+                {sourceDropdown && filteredSourceStations.length > 0 && (
+                  <motion.div initial={{ opacity:0, y:-10 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-10 }}
+                    className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredSourceStations.map((s, i) => (
+                      <div key={i} onClick={() => selectSource(s)}
+                        className="px-4 py-3 hover:bg-blue-50 cursor-pointer transition border-b border-gray-100 last:border-b-0 flex items-center">
+                        <span className="text-blue-500 mr-2">📍</span><span className="text-gray-800">{s}</span>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Swap */}
+            <div className="flex justify-center">
+              <button onClick={swapStations} className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
               </button>
+            </div>
 
-              {/* Internal Component Wrapper */}
-              <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <SmartAlerts />
-              </div>
-            </motion.div>
+            {/* Destination */}
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-2">To (Destination)</label>
+              <input type="text" value={destination}
+                onChange={e => { setDestination(e.target.value); setDestDropdown(true); setError(""); }}
+                onFocus={() => setDestDropdown(true)}
+                placeholder="Enter destination station..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition"
+              />
+              <AnimatePresence>
+                {destDropdown && filteredDestStations.length > 0 && (
+                  <motion.div initial={{ opacity:0, y:-10 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-10 }}
+                    className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredDestStations.map((s, i) => (
+                      <div key={i} onClick={() => selectDestination(s)}
+                        className="px-4 py-3 hover:bg-purple-50 cursor-pointer transition border-b border-gray-100 last:border-b-0 flex items-center">
+                        <span className="text-purple-500 mr-2">📍</span><span className="text-gray-800">{s}</span>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Search button */}
+            <button onClick={searchRoutes} disabled={loading}
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition disabled:opacity-50 disabled:cursor-not-allowed">
+              {loading ? "Searching..." : "Search Trains 🔍"}
+            </button>
           </div>
+        </motion.div>
+
+        {/* Error */}
+        {error && (
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
+            className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+            {error}
+          </motion.div>
         )}
-      </AnimatePresence>
 
-      {/* NAVBAR */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg"><Navigation className="text-white fill-current" size={20} /></div>
-            <div><h1 className="text-2xl font-black tracking-tighter">SAARTHI</h1><p className="text-[10px] uppercase font-bold text-blue-600 leading-none">Urban Companion</p></div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Smart Alerts Icon */}
-            <button 
-              onClick={() => setIsSmartAlertsOpen(true)} 
-              className="p-3 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-2xl transition-all shadow-sm group"
-            >
-              <Radio size={20} className="group-hover:animate-pulse" />
-            </button>
+        {/* Results */}
+        <AnimatePresence>
+          {routes.length > 0 && (
+            <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }} className="space-y-5">
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                🛤️ Available Routes ({routes.length})
+                {source && destination && (
+                  <span className="text-base font-normal text-gray-500 ml-3">{source} → {destination}</span>
+                )}
+              </h2>
 
-            {/* Community Icon */}
-            <button 
-              onClick={() => setIsCommunityOpen(true)} 
-              className="p-3 bg-slate-100 hover:bg-blue-600 hover:text-white rounded-2xl transition-all shadow-sm relative"
-            >
-              <Bell size={20} />
-              <span className="absolute top-2 right-2 w-3 h-3 bg-red-500 border-2 border-white rounded-full"></span>
-            </button>
-            <div className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-600 font-bold text-xs shadow-sm">JD</div>
-          </div>
-        </div>
-      </nav>
+              {routes.map((route, idx) => {
+                const crowd  = crowdMap[idx];
+                const cfg    = crowd ? CROWD[crowd.crowd] : null;
+                const dept   = route.segments?.[0]?.departureTime;
+                const arr    = route.segments?.[route.segments.length - 1]?.arrivalTime;
+                const dur    = calculateDuration(dept, arr);
 
-      {/* MAIN DASHBOARD CONTENT */}
-      <motion.main variants={containerVars} initial="initial" animate="animate" className="max-w-7xl mx-auto p-6 lg:p-12 space-y-12">
-        
-        {/* HERO SECTION */}
-        <motion.section variants={itemVars} className="relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[2rem] blur opacity-10 group-hover:opacity-20 transition duration-1000"></div>
-          <div className="relative bg-white rounded-[2rem] shadow-2xl shadow-slate-200/50 border border-slate-100 p-8 lg:p-12">
-            <div className="flex flex-col lg:flex-row justify-between items-center gap-10">
-              <div className="flex items-center justify-center gap-6 w-full lg:w-auto">
-                <div className="text-center lg:text-left"><span className="text-[10px] font-black uppercase text-blue-500">Source</span><h2 className="text-4xl font-black text-slate-800">Dadar</h2></div>
-                <div className="flex-1 lg:w-48 flex items-center gap-2"><div className="h-[2px] flex-1 bg-slate-200"></div><ArrowRight className="text-blue-600" size={20} /><div className="h-[2px] flex-1 bg-slate-200"></div></div>
-                <div className="text-center lg:text-right"><span className="text-[10px] font-black uppercase text-blue-500">Destination</span><h2 className="text-4xl font-black text-slate-800">Panvel</h2></div>
-              </div>
-              <button className="w-full lg:w-auto bg-slate-900 hover:bg-blue-600 text-white font-bold py-5 px-12 rounded-2xl transition-all shadow-xl active:scale-95 flex items-center gap-3 justify-center">Check Live Journey <ChevronRight size={20}/></button>
-            </div>
-          </div>
-        </motion.section>
+                return (
+                  <motion.div key={idx}
+                    initial={{ opacity:0, x:-20 }} animate={{ opacity:1, x:0 }} transition={{ delay: idx * 0.08 }}
+                    className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition overflow-hidden">
 
-        {/* OPTIONS GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {options.map((opt, idx) => (
-            <motion.div variants={itemVars} whileHover={{ y: -10 }} key={idx} className={`relative bg-white rounded-[2rem] p-8 border ${opt.recommended ? 'border-blue-600 ring-8 ring-blue-50' : 'border-slate-100'} shadow-xl flex flex-col`}>
-              {opt.recommended && <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-black py-1.5 px-6 rounded-full uppercase ring-4 ring-white shadow-lg tracking-widest">Recommended</div>}
-              <div className={`w-14 h-14 rounded-2xl mb-6 flex items-center justify-center bg-gradient-to-br ${opt.gradient} text-white shadow-lg shadow-blue-200`}>{idx === 0 ? <Bus size={28}/> : idx === 1 ? <Train size={28}/> : <Car size={28}/>}</div>
-              <h3 className="text-2xl font-black text-slate-800 mb-1">{opt.title}</h3>
-              <p className="text-slate-400 font-bold text-sm mb-8 uppercase tracking-widest"><Info size={14} className="inline mr-1 opacity-50"/> {opt.transport}</p>
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Est. Fare</p><p className="font-black text-slate-800">{opt.cost}</p></div>
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Total Time</p><p className="font-black text-slate-800">{opt.time}</p></div>
-              </div>
-              <div className="space-y-3 mb-8">
-                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest"><span className="text-slate-400">Comfort</span><span className={opt.comfort === 'High' ? 'text-emerald-500' : 'text-blue-500'}>{opt.comfort}</span></div>
-                 <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full bg-gradient-to-r ${opt.gradient} ${opt.comfort === 'High' ? 'w-full' : 'w-1/2'}`}></div></div>
-              </div>
-              <p className="text-sm font-medium text-slate-500 italic mt-auto border-t border-slate-50 pt-6">"{opt.desc}"</p>
+                    {/* ── Crowd Banner ────────────────────────────────── */}
+                    {cfg && (
+                      <div className="flex items-center gap-3 px-6 py-3 font-semibold text-sm border-b"
+                        style={{ background: cfg.bg, borderColor: cfg.color + "44", color: cfg.color }}>
+                        <span className="text-lg">{cfg.emoji}</span>
+                        <span className="font-black uppercase tracking-wide">{cfg.label}</span>
+                        <span className="font-normal text-gray-600 text-xs">at {crowd.time}</span>
+                        <span className="ml-auto text-xs text-gray-500 font-normal">{ADVICE[crowd.crowd]}</span>
+                      </div>
+                    )}
+                    {!cfg && crowdMap[idx] === undefined && routes.length > 0 && (
+                      <div className="px-6 py-2 text-xs text-gray-400 border-b border-gray-100 animate-pulse">
+                        Loading crowd data…
+                      </div>
+                    )}
+
+                    {/* ── Route Header ────────────────────────────────── */}
+                    <div className="px-6 pt-4 pb-2 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-800">
+                          {route.isDirect ? "🚄 Direct Train" : "🔄 Train with Change"}
+                        </h3>
+                        <p className="text-sm text-gray-500">{route.segments.length} segment{route.segments.length > 1 ? "s" : ""}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-green-600">₹{route.totalFare}</div>
+                        <div className="text-sm text-gray-500">{dur}</div>
+                      </div>
+                    </div>
+
+                    {/* ── Segments ────────────────────────────────────── */}
+                    <div className="px-6 pb-5 space-y-3">
+                      {route.segments.map((seg, si) => (
+                        <div key={si}>
+                          {si > 0 && (
+                            <div className="flex items-center my-2">
+                              <div className="flex-1 border-t-2 border-dashed border-yellow-400" />
+                              <span className="px-3 text-xs font-medium text-yellow-600 bg-yellow-50 rounded-full">
+                                Change at {seg.fromStation}
+                              </span>
+                              <div className="flex-1 border-t-2 border-dashed border-yellow-400" />
+                            </div>
+                          )}
+
+                          <div className="bg-gray-50 rounded-xl p-4">
+                            {/* Train ID + fare */}
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                                🚂 {seg.trainId}
+                              </span>
+                              <span className="text-sm font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded">
+                                ₹{seg.fare}
+                              </span>
+                            </div>
+
+                            {/* From → To timeline */}
+                            <div className="flex items-center gap-3">
+                              {/* Departure */}
+                              <div className="text-center min-w-[70px]">
+                                <div className="text-xl font-black text-gray-800">{seg.departureTime}</div>
+                                <div className="text-xs text-gray-500 mt-0.5">{seg.fromStation}</div>
+                              </div>
+
+                              {/* Line */}
+                              <div className="flex-1 flex flex-col items-center gap-1">
+                                <div className="flex items-center w-full gap-1">
+                                  <div className="h-0.5 flex-1 bg-blue-300 rounded" />
+                                  <span className="text-[10px] text-gray-400 whitespace-nowrap">{seg.stopsCount} stops</span>
+                                  <div className="h-0.5 flex-1 bg-blue-300 rounded" />
+                                </div>
+                                <div className="text-[10px] text-gray-400">
+                                  {calculateDuration(seg.departureTime, seg.arrivalTime)}
+                                </div>
+                              </div>
+
+                              {/* Arrival */}
+                              <div className="text-center min-w-[70px]">
+                                <div className="text-xl font-black text-gray-800">{seg.arrivalTime}</div>
+                                <div className="text-xs text-gray-500 mt-0.5">{seg.toStation}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                );
+              })}
             </motion.div>
-          ))}
-        </div>
+          )}
+        </AnimatePresence>
 
-        {/* TIMELINE SECTION */}
-        <motion.section variants={itemVars} className="bg-slate-900 rounded-[3rem] shadow-2xl overflow-hidden text-white relative border border-white/5">
-          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-500/10 blur-[120px]"></div>
-          <div className="p-8 lg:p-16 relative z-10">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-16 gap-6">
-              <div><h2 className="text-4xl font-black tracking-tight">Live Journey Track</h2><p className="text-slate-400 font-medium">Dadar → Panvel Junction</p></div>
-              <div className="bg-white/10 backdrop-blur-xl border border-white/20 px-8 py-5 rounded-[2rem] shadow-2xl text-center"><p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Live ETA</p><p className="text-3xl font-black">75m</p></div>
-            </div>
-            <div className="relative border-l-2 border-white/10 ml-8 space-y-12 pb-6">
-              {[
-                { label: "Start at Dadar", sub: "Platform 4", icon: <MapPin />, status: "active" },
-                { label: "Dadar to Kurla", sub: "Central Line", icon: <Train />, isPrimary: true },
-                { label: "Kurla to Panvel", sub: "Harbour Line", icon: <Train />, isPrimary: true },
-                { label: "Arrive at Panvel", sub: "Terminal 2", icon: <CheckCircle2 />, status: "end" },
-              ].map((step, i) => (
-                <div key={i} className="relative pl-14 group">
-                  <div className={`absolute -left-[17px] top-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 z-20 ${step.status === 'end' ? 'bg-emerald-500 scale-125 shadow-lg shadow-emerald-500/20' : step.status === 'active' ? 'bg-blue-600 shadow-[0_0_20px_rgba(37,99,235,0.4)]' : 'bg-slate-800 border border-white/20'}`}>
-                    {step.status === 'end' ? <CheckCircle2 size={16} /> : step.status === 'active' ? <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse" /> : <div className="w-2 h-2 bg-white/40 rounded-full" />}
-                  </div>
-                  <div className={`transition-all duration-300 ${step.isPrimary ? 'bg-white/5 border border-white/10 p-6 rounded-3xl' : ''}`}>
-                    <h4 className={`text-2xl font-black ${step.status === 'end' ? 'text-emerald-400' : 'text-white'}`}>{step.label}</h4>
-                    <p className="text-slate-400 font-bold text-base mt-1 uppercase tracking-widest text-xs">{step.sub}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </motion.section>
-      </motion.main>
+        {/* No results */}
+        {!loading && routes.length === 0 && source && destination && !error && (
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
+            className="text-center py-12 bg-white rounded-xl shadow-lg">
+            <div className="text-6xl mb-4">🔍</div>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">No Routes Found</h3>
+            <p className="text-gray-500">{searchMessage || "Try different stations or check spelling"}</p>
+          </motion.div>
+        )}
+      </div>
     </div>
   );
 };
 
-export default JourneyDashboard;
+export default Journey;

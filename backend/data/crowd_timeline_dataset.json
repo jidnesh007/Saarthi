@@ -1,0 +1,365 @@
+{
+    "description": "Generic crowd timeline dataset (India-inspired patterns)",
+    "data": [
+        {
+            "time": "05:00",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "05:30",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "06:00",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "06:30",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "07:00",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "07:30",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "08:00",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "08:30",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "09:00",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "09:30",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "10:00",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "10:30",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "11:00",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "11:30",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "12:00",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "12:30",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "13:00",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "13:30",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "14:00",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "14:30",
+            "day": "weekday",
+            "crowd": "LOW"
+        },
+        {
+            "time": "15:00",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "15:30",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "16:00",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "16:30",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "17:00",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "17:30",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "18:00",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "18:30",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "19:00",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "19:30",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "20:00",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "20:30",
+            "day": "weekday",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "21:00",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "21:30",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "22:00",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "22:30",
+            "day": "weekday",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "05:00",
+            "day": "weekend",
+            "crowd": "LOW"
+        },
+        {
+            "time": "05:30",
+            "day": "weekend",
+            "crowd": "LOW"
+        },
+        {
+            "time": "06:00",
+            "day": "weekend",
+            "crowd": "LOW"
+        },
+        {
+            "time": "06:30",
+            "day": "weekend",
+            "crowd": "LOW"
+        },
+        {
+            "time": "07:00",
+            "day": "weekend",
+            "crowd": "LOW"
+        },
+        {
+            "time": "07:30",
+            "day": "weekend",
+            "crowd": "LOW"
+        },
+        {
+            "time": "08:00",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "08:30",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "09:00",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "09:30",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "10:00",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "10:30",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "11:00",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "11:30",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "12:00",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "12:30",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "13:00",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "13:30",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "14:00",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "14:30",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "15:00",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "15:30",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "16:00",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "16:30",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "17:00",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "17:30",
+            "day": "weekend",
+            "crowd": "MEDIUM"
+        },
+        {
+            "time": "18:00",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "18:30",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "19:00",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "19:30",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "20:00",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "20:30",
+            "day": "weekend",
+            "crowd": "HIGH"
+        },
+        {
+            "time": "21:00",
+            "day": "weekend",
+            "crowd": "LOW"
+        },
+        {
+            "time": "21:30",
+            "day": "weekend",
+            "crowd": "LOW"
+        },
+        {
+            "time": "22:00",
+            "day": "weekend",
+            "crowd": "LOW"
+        },
+        {
+            "time": "22:30",
+            "day": "weekend",
+            "crowd": "LOW"
+        }
+    ]
+}
