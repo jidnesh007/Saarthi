@@ -289,6 +289,3 @@ python app.py
 
 ---
 
-
-If you want next level:
-I can turn this into a **killer hackathon pitch + GitHub that recruiters actually remember**.
