@@ -1,133 +1,183 @@
-<div align="center">
-
 # 🚆 SAARTHI
+
 ### Smart Urban Commute Intelligence Platform
 
-*Real-time crowd intelligence, journey planning & AI-powered alerts for Mumbai Local trains*
-
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-Rolldown-646CFF?style=flat-square&logo=vite)](https://vitejs.dev/)
-[![TailwindCSS](https://img.shields.io/badge/Tailwind-v4-38BDF8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
-[![Express](https://img.shields.io/badge/Express-4.x-000000?style=flat-square&logo=express)](https://expressjs.com/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-47A248?style=flat-square&logo=mongodb)](https://www.mongodb.com/)
-[![Flask](https://img.shields.io/badge/Flask-Python-000000?style=flat-square&logo=flask)](https://flask.palletsprojects.com/)
-[![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-FF4081?style=flat-square)](https://ultralytics.com/)
-
-</div>
+**AI-powered crowd prediction, journey planning, and real-time intelligence for Mumbai Local trains**
 
 ---
 
 ## 📖 Overview
 
-**Saarthi** is a full-stack urban commute intelligence platform built around the **Mumbai Local railway network**. It combines a React frontend, a Node.js/Express backend, and two Python microservices to deliver:
+**Saarthi** is a full-stack AI-driven platform designed to solve one of Mumbai’s biggest problems — **unpredictable crowding in local trains**.
 
-- 🗺️ **Journey Planning** — search real train routes across 400+ Mumbai local stations with live crowd level overlays, exact departure/arrival times, fare estimates, and multi-segment itineraries.
-- 🔴 **Crowd Intelligence Dashboard** — a live heatmap of Mumbai's rail network where crowd intensity decays in real-time, powered by an NLP classifier that reads user-submitted natural-language reports.
-- 🤖 **AI-Powered Crowd Detection** — upload images/videos or stream your webcam to run YOLOv8-based people detection and automated density classification (LOW / MEDIUM / HIGH).
+It combines:
+
+* 📍 Route planning across **400+ stations**
+* 🔴 Real-time crowd intelligence via **NLP + user reports**
+* 🤖 Computer vision-based **crowd density detection (YOLOv8)**
+* ⚡ Live dashboards, alerts, and predictions
+
 
 ---
 
-## 🏗️ Architecture
+## 🧠 Core Idea
+
+Most commute apps tell you *when* to travel.
+Saarthi tells you **how crowded your journey will be before you even leave**.
+
+---
+
+## 🏗️ System Architecture
 
 ```
-Saarthi---Urban-Commute/
-│
-├── frontend/                  # React 19 + Vite + TailwindCSS v4
-│   └── src/
-│       ├── App.jsx            # Root — animated view router (home / journey / crowd / profile)
-│       ├── pages/
-│       │   ├── JourneyDashboard.jsx   # Train route search + crowd overlays
-│       │   ├── CrowdDashboard.jsx     # Live map + NLP chat
-│       │   ├── LoginPage.jsx
-│       │   ├── RegisterPage.jsx
-│       │   └── Planning.jsx
-│       └── components/
-│           ├── ProfileSetup.jsx
-│           ├── SmartAlerts.jsx
-│           └── CrowdTimeline.jsx
-│
-├── backend/                   # Node.js + Express REST API (port 5000)
-│   ├── server.js              # Entry point — CORS, JWT auth, MongoDB
-│   ├── models/
-│   │   ├── User.js            # Auth user schema
-│   │   └── journey.js         # Journey plan schema with crowd estimation
-│   ├── routes/
-│   │   ├── auth.js            # POST /api/auth/register|login
-│   │   ├── profile.js         # GET/PUT /api/profile
-│   │   ├── journeyRoutes.js   # GET /api/journey/stations | POST /api/journey/search
-│   │   ├── crowdRoutes.js     # GET /api/crowd/predict|stations|timeline
-│   │   └── trainRoutes.js     # Raw timetable access
-│   └── data/
-│       ├── final_timetable_fixed.json       # Full Mumbai local timetable (~8.7 MB)
-│       ├── mumbai_local_stations.json       # Station list (~400+ stations)
-│       └── crowd_timeline_dataset.json      # Historical crowd data by time slot
-│
-└── python/                    # Two independent Flask microservices
-    ├── chatting.py            # NLP Crowd Intelligence API  (port 5001)
-    └── app.py                 # YOLOv8 Crowd Density API   (port 5000)
+Frontend (React)
+        ↓
+Node.js Backend (Express API)
+        ↓
+-----------------------------------
+| NLP Service (Flask)             |
+| Crowd Classification           |
+-----------------------------------
+-----------------------------------
+| CV Service (Flask + YOLOv8)     |
+| Density Detection              |
+-----------------------------------
+        ↓
+MongoDB + Static Dataset
 ```
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
-### 🗺️ Journey Dashboard
-- Autocomplete search across **400+ Mumbai local stations**
-- Finds **direct & multi-segment routes** with interchange information
-- Displays **departure time, arrival time, stops count, and fare (₹)** per segment
-- Fetches **real-time crowd level** (Low / Moderate / High) for each route at departure time
-- Smart time-slot snapping — maps any departure time to the nearest 30-minute crowd dataset entry
-- Animated Framer Motion card transitions and responsive layout
+### 🗺️ Journey Planning
+
+* Search routes across **400+ Mumbai stations**
+* Supports **multi-interchange routes**
+* Displays:
+
+  * Departure & arrival time
+  * Fare estimation (₹)
+  * Stops & segments
+* 🧠 Smart crowd overlay based on time-slot mapping
+
+---
 
 ### 🔴 Crowd Intelligence Dashboard
-| Feature | Detail |
-|---|---|
-| **Live Heatmap** | Leaflet map centred on Mumbai showing all tracked stations as coloured circle markers |
-| **Colour coding** | 🟢 Green = Normal · 🟡 Amber = Moderate · 🔴 Red = High Crowd |
-| **Intensity decay** | Per-station crowd score decays by ×0.90 every 60 seconds |
-| **NLP Chat** | Users submit natural-language reports ("Dadar is super crowded") — classified and reflected on the map live |
-| **Smart Alerts** | Animated alert banners appear when a station exceeds threshold (≥5 reports or ≥60% crowd ratio in 5-min window) |
-| **Poll interval** | Map & alerts refresh every 5 seconds |
 
-### 🤖 YOLOv8 Crowd Density Analyser (`python/app.py`)
-- Upload **images** → tiled YOLOv8 inference (3×3 grid + full-pass) → annotated result with bounding boxes + heatmap overlay
-- Upload **videos** → threaded frame-by-frame processing with live progress, density smoother, and frame-skip optimisation
-- **Webcam streaming** → dual-thread architecture (reader thread + detector thread) → MJPEG stream with real-time stats
-- Outputs `LOW / MEDIUM / HIGH` density classification with score, overlap ratio, and person count badge
+* Live **heatmap of stations**
+* Crowd levels:
 
-### 🔐 Auth & Profiles
-- JWT-based authentication (login / register)
-- User profile setup with `bcryptjs` password hashing
-- Protected routes on both frontend (`ProtectedRoute.jsx`) and backend (auth middleware)
+  * 🟢 Low
+  * 🟡 Moderate
+  * 🔴 High
+* Real-time updates using:
+
+  * NLP-based user reports
+  * Time-decay algorithm (×0.90 per minute)
+* ⚡ Auto-refresh every 5 seconds
+* 🚨 Smart alerts for overcrowded stations
+
+---
+
+### 🤖 YOLOv8 Crowd Density Detection
+
+* Upload **image / video / webcam stream**
+* Detects:
+
+  * People count
+  * Density level (LOW / MEDIUM / HIGH)
+* Uses:
+
+  * Grid-based detection (3×3 tiling)
+  * Full-frame + patch inference
+* Outputs:
+
+  * Bounding boxes
+  * Heatmap overlay
+  * Density score
+
+---
+
+### 🧾 NLP Crowd Reporting System
+
+* Users submit natural language input:
+
+  ```
+  "Andheri is packed right now"
+  ```
+* Model:
+
+  * TF-IDF + Logistic Regression
+* Output:
+
+  * Crowd classification
+* Updates live heatmap instantly
+
+---
+
+### 🔐 Authentication System
+
+* JWT-based authentication
+* Secure login/register
+* Protected routes
+* Password hashing using bcrypt
+
+---
+
+## 🧪 Machine Learning Notebooks
+
+### 📊 Crowd Density Detection
+
+**File:** `Crowd_Density_v2_FullDetection.ipynb`
+
+* YOLO-based detection experiments
+* Grid-based tiling for dense scenes
+* Performance tuning & inference testing
+* Forms the base of CV microservice
+
+---
+
+### 🧾 NLP Crowd Detection
+
+**File:** `NLP_Crowd_Detection_System.ipynb`
+
+* Text preprocessing & cleaning
+* TF-IDF vectorization
+* Logistic Regression classifier
+* Evaluation metrics & analysis
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|---|---|
-| **Frontend** | React 19, Vite (Rolldown), TailwindCSS v4, Framer Motion, GSAP, React Leaflet, Axios, Lucide Icons |
-| **Backend** | Node.js, Express 4, MongoDB + Mongoose, JWT, bcryptjs, cookie-parser |
-| **NLP Service** | Python, Flask, TF-IDF + Logistic Regression (scikit-learn), Flask-CORS |
-| **CV Service** | Python, Flask, YOLOv8 (Ultralytics), OpenCV, NumPy |
-| **Data** | Static JSON timetable (Mumbai local), crowd timeline dataset |
+### Frontend
+
+* React 19
+* Vite
+* TailwindCSS
+* Framer Motion
+* Leaflet
+
+### Backend
+
+* Node.js
+* Express.js
+* MongoDB + Mongoose
+* JWT Auth
+
+### AI / ML
+
+* Python (Flask)
+* YOLOv8 (Ultralytics)
+* OpenCV
+* Scikit-learn
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
-
-- **Node.js** ≥ 18
-- **npm** ≥ 9
-- **MongoDB** (local or Atlas URI)
-- **Python** ≥ 3.9
-- A YOLOv8 model weights file (`yolov8s.pt` from [Ultralytics](https://github.com/ultralytics/ultralytics))
-- A trained NLP model (`python/model/model.pkl` + `python/model/vectorizer.pkl`)
-
----
-
-### 1. Clone the Repository
+### 1. Clone Repository
 
 ```bash
 git clone https://github.com/<your-username>/Saarthi---Urban-Commute.git
@@ -136,34 +186,30 @@ cd Saarthi---Urban-Commute
 
 ---
 
-### 2. Backend (Node.js — Port 5000)
+### 2. Backend Setup
 
 ```bash
 cd backend
 npm install
 ```
 
-Create a `.env` file in `backend/`:
+Create `.env`:
 
 ```env
-MONGO_URI=mongodb://localhost:27017/saarthi
-JWT_SECRET=your_super_secret_key
+MONGO_URI=your_mongo_uri
+JWT_SECRET=your_secret
 PORT=5000
 ```
 
-Start the server:
+Run:
 
 ```bash
-# Development (with auto-reload)
 npm run dev
-
-# Production
-npm start
 ```
 
 ---
 
-### 3. Frontend (React — Port 5173)
+### 3. Frontend Setup
 
 ```bash
 cd frontend
@@ -171,11 +217,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
-
 ---
 
-### 4. NLP Crowd Intelligence Service (Python — Port 5001)
+### 4. NLP Service
 
 ```bash
 cd python
@@ -183,84 +227,68 @@ pip install flask flask-cors scikit-learn
 python chatting.py
 ```
 
-> **Note:** Requires `python/model/model.pkl` and `python/model/vectorizer.pkl`. Train your own TF-IDF + Logistic Regression classifier on crowd-report data, or place pre-trained files in that directory.
-
 ---
 
-### 5. YOLOv8 Crowd Density Service (Python — Port 5000)
-
-> ⚠️ This service runs on port 5000 — same as the Node backend. Run it as a separate service (or change its port) depending on your use case.
+### 5. YOLOv8 Service
 
 ```bash
-cd python
-pip install flask ultralytics opencv-python numpy werkzeug
-# Place yolov8s.pt in the python/ directory or set MODEL_PATH env var
+pip install ultralytics opencv-python numpy
 python app.py
 ```
 
 ---
 
-## 🔌 API Reference
+## 🔌 API Endpoints
 
-### Node.js Backend (`localhost:5000`)
+### Backend
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/auth/register` | Register a new user |
-| `POST` | `/api/auth/login` | Login & receive JWT |
-| `GET` | `/api/profile/me` | Get authenticated user profile |
-| `GET` | `/api/journey/stations` | List all Mumbai local stations |
-| `POST` | `/api/journey/search` | Search routes `{ source, destination }` |
-| `GET` | `/api/crowd/predict` | Crowd prediction `?station=dadar&time=08:30&day=weekday` |
-| `GET` | `/api/crowd/stations` | List crowd-tracked stations |
-| `GET` | `/api/crowd/timeline` | Full crowd timeline `?station=dadar&day=weekday` |
+* `/api/auth/login`
+* `/api/journey/search`
+* `/api/crowd/predict`
+* `/api/profile`
 
-### NLP Service (`localhost:5001`)
+### NLP Service
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/` | Health check |
-| `POST` | `/chat` | Classify a crowd report `{ "text": "Andheri is packed" }` |
-| `GET` | `/alerts` | Get all currently alerted stations |
-| `GET` | `/heatmap` | Per-station intensity + coordinates |
-| `GET` | `/stats` | Runtime model & classification stats |
+* `/chat`
+* `/heatmap`
+* `/alerts`
 
-### YOLOv8 Service (`localhost:5000`)
+### CV Service
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/image` | Upload image for crowd density analysis |
-| `POST` | `/api/video` | Upload video for frame-by-frame processing |
-| `GET` | `/api/video/progress/<job_id>` | Poll video processing progress |
-| `POST` | `/api/webcam/start` | Start webcam MJPEG stream |
-| `POST` | `/api/webcam/stop` | Stop webcam stream |
-| `GET` | `/api/webcam/feed` | Live MJPEG stream |
-| `GET` | `/api/webcam/stats` | Live density level + person count |
+* `/api/image`
+* `/api/video`
+* `/api/webcam`
 
 ---
 
-## 📁 Data Files
+## 📁 Dataset
 
-| File | Size | Description |
-|---|---|---|
-| `backend/data/final_timetable_fixed.json` | ~8.7 MB | Complete Mumbai local timetable with train IDs, departure/arrival times, stops |
-| `backend/data/mumbai_local_stations.json` | ~2 KB | Canonical list of 400+ Mumbai local station names |
-| `backend/data/crowd_timeline_dataset.json` | ~8 KB | Historical crowd levels by station, time slot, and day type |
+* Mumbai local timetable dataset
+* Station list (~400+ stations)
+* Crowd timeline dataset
 
 ---
 
 
+## 🔮 Future Improvements
+
+* Deep learning NLP model (BERT)
+* Real CCTV/live feed integration
+* Mobile app
+* Predictive crowd forecasting (LSTM / Time-series)
+* Live train delay integration
+
+---
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+1. Fork the repo
+2. Create branch
+3. Commit changes
+4. Open PR
 
 ---
 
 
-#   S a a r t h i  
- 
+If you want next level:
+I can turn this into a **killer hackathon pitch + GitHub that recruiters actually remember**.
